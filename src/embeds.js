@@ -10,6 +10,107 @@ const STATUS_LABEL = {
   removed: 'Removed or Voided',
 };
 
+export function buildHelpEmbeds(prefix) {
+  const main = new EmbedBuilder()
+    .setTitle('Staff Action Ledger Help Guide')
+    .setDescription(
+      'This bot creates permanent, tamper-evident staff action records. Every new case requires a reason and one attached image or video.',
+    )
+    .addFields(
+      {
+        name: 'Hiring and Promotions',
+        value: [
+          `\`${prefix} hire @user <starting rank> | <reason>\``,
+          `\`${prefix} promote @user <old rank> | <new rank> | <reason>\``,
+          '',
+          'Aliases: `hiring`, `hired`, `promotion`, and `promoted`.',
+        ].join('\n'),
+      },
+      {
+        name: 'Disciplinary Cases',
+        value: [
+          `\`${prefix} warning @user <reason>\``,
+          `\`${prefix} strike @user <reason>\``,
+          `\`${prefix} suspension @user <duration> | <reason>\``,
+          `\`${prefix} demotion @user <old rank> | <new rank> | <reason>\``,
+          `\`${prefix} fired @user <reason>\``,
+          '',
+          '**Attach one image or video to the same message for every staff action.**',
+        ].join('\n'),
+      },
+      {
+        name: 'Read Cases',
+        value: [
+          `\`${prefix} case 133\` full case, issuer, date, action, reason, and proof`,
+          `\`${prefix} cases @user\` active case history`,
+          `\`${prefix} cases @user all\` includes removed actions`,
+          `\`${prefix} stats @user\` action totals`,
+          `\`${prefix} export @user all\` csv export`,
+        ].join('\n'),
+      },
+      {
+        name: 'Correct or Remove Records',
+        value: [
+          `\`${prefix} amend 133 <correction note>\` appends a note without editing history`,
+          `\`${prefix} remove 133 <reason>\` voids a case without deleting it`,
+        ].join('\n'),
+      },
+    );
+
+  const admin = new EmbedBuilder()
+    .setTitle('Administrative Setup and Audit Commands')
+    .addFields(
+      {
+        name: 'Initial Setup',
+        value: `\`${prefix} setup #hr-commands #audit-log #removed-actions #case-evidence\``,
+      },
+      {
+        name: 'Whitelist',
+        value: [
+          `\`${prefix} whitelist add @user hr\``,
+          `\`${prefix} whitelist add @user admin\``,
+          `\`${prefix} whitelist remove @user\``,
+          `\`${prefix} whitelist list\``,
+        ].join('\n'),
+      },
+      {
+        name: 'Audit Ledger',
+        value: [
+          `\`${prefix} audit recent 10\``,
+          `\`${prefix} audit verify\``,
+          `\`${prefix} removed 10\``,
+          `\`${prefix} status\``,
+        ].join('\n'),
+      },
+      {
+        name: 'Access Levels',
+        value:
+          '**HR** can create, read, amend, export, and view cases.\n**Admin** can also configure channels, manage the whitelist, remove cases, and verify the audit chain.\n**Owner IDs** are configured in the hosting environment and cannot be locked out by the Discord whitelist.',
+      },
+    );
+
+  return [main, admin];
+}
+
+export function buildCommandsEmbed(prefix) {
+  return new EmbedBuilder()
+    .setTitle('Command List')
+    .setDescription(
+      [
+        `\`${prefix} help\``,
+        `\`${prefix} commands\``,
+        `\`${prefix} hire\`, \`${prefix} promote\``,
+        `\`${prefix} warning\`, \`${prefix} strike\`, \`${prefix} suspension\`, \`${prefix} demotion\`, \`${prefix} fired\``,
+        `\`${prefix} case\`, \`${prefix} cases\`, \`${prefix} stats\`, \`${prefix} export\``,
+        `\`${prefix} amend\`, \`${prefix} remove\``,
+        `\`${prefix} whitelist\`, \`${prefix} setup\``,
+        `\`${prefix} audit\`, \`${prefix} removed\`, \`${prefix} status\``,
+      ].join('\n'),
+    )
+    .setFooter({ text: `Run ${prefix} help for syntax and examples.` });
+}
+
+
 export function buildCaseEmbed(caseRecord) {
   const removed = Boolean(caseRecord.removed_at);
   const embed = new EmbedBuilder()
@@ -59,7 +160,12 @@ export function buildCaseEmbed(caseRecord) {
     embed.addFields({ name: 'Suspension Duration', value: caseRecord.duration });
   }
 
-  if (caseRecord.previous_rank || caseRecord.new_rank) {
+  if (caseRecord.action_type === 'hiring' && caseRecord.new_rank) {
+    embed.addFields({
+      name: 'Starting Rank',
+      value: caseRecord.new_rank,
+    });
+  } else if (caseRecord.previous_rank || caseRecord.new_rank) {
     embed.addFields({
       name: 'Rank Change',
       value: `${caseRecord.previous_rank || 'unknown'} → ${caseRecord.new_rank || 'unknown'}`,
@@ -287,7 +393,12 @@ export function buildUserActionDmEmbed(
     });
   }
 
-  if (caseRecord.previous_rank || caseRecord.new_rank) {
+  if (caseRecord.action_type === 'hiring' && caseRecord.new_rank) {
+    embed.addFields({
+      name: 'Starting Rank',
+      value: caseRecord.new_rank,
+    });
+  } else if (caseRecord.previous_rank || caseRecord.new_rank) {
     embed.addFields({
       name: 'Rank Change',
       value: `${caseRecord.previous_rank || 'unknown'} → ${caseRecord.new_rank || 'unknown'}`,

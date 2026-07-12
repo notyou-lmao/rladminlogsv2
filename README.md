@@ -2,7 +2,7 @@
 
 A Discord moderation record bot whose only job is preserving administrative actions taken against staff members.
 
-It uses the prefix `.admin` by default and supports official warnings, strikes, suspensions, demotions, and firings. Every new disciplinary case requires a written reason and exactly one attached image or video.
+It uses the prefix `.admin` by default and supports hirings, promotions, official warnings, strikes, suspensions, demotions, and firings. Every new disciplinary case requires a written reason and exactly one attached image or video.
 
 ## What is included
 
@@ -46,11 +46,13 @@ For the strongest setup, only the business owner should control Railway, GitHub,
 .admin commands
 ```
 
-### Create disciplinary cases
+### Create staff action cases
 
 Attach exactly one image or video to the same message.
 
 ```text
+.admin hire @user <starting rank> | <reason>
+.admin promote @user <old rank> | <new rank> | <reason>
 .admin warning @user <reason>
 .admin strike @user <reason>
 .admin suspension @user <duration> | <reason>
@@ -58,9 +60,13 @@ Attach exactly one image or video to the same message.
 .admin fired @user <reason>
 ```
 
+Aliases include `.admin hiring`, `.admin hired`, `.admin promotion`, and `.admin promoted`.
+
 Examples:
 
 ```text
+.admin hire @Ezra junior moderator | completed onboarding and passed the staff review
+.admin promote @Ezra moderator | senior moderator | demonstrated consistent leadership
 .admin warning @Ezra repeatedly ignored the staff conduct policy
 .admin suspension @Ezra 7 days | left a scheduled shift without approval
 .admin demotion @Ezra senior moderator | moderator | abused administrative permissions

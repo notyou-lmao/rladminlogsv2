@@ -20,6 +20,8 @@ import {
   buildAuditEmbed,
   buildCaseEmbed,
   buildCaseListEmbeds,
+  buildCommandsEmbed,
+  buildHelpEmbeds,
   buildUserActionDmEmbed,
   buildCompactAuditList,
   buildCompactRemovedList,
@@ -163,96 +165,6 @@ async function ensureCommandChannel(message, guildConfig) {
   return true;
 }
 
-function helpEmbeds(prefix) {
-  const main = new EmbedBuilder()
-    .setTitle('Staff Action Ledger Help Guide')
-    .setDescription(
-      'This bot creates permanent, tamper-evident staff disciplinary records. Every new disciplinary case requires a reason and one attached image or video.',
-    )
-    .addFields(
-      {
-        name: 'Create Cases',
-        value: [
-          `\`${prefix} warning @user <reason>\``,
-          `\`${prefix} strike @user <reason>\``,
-          `\`${prefix} suspension @user <duration> | <reason>\``,
-          `\`${prefix} demotion @user <old rank> | <new rank> | <reason>\``,
-          `\`${prefix} fired @user <reason>\``,
-          '',
-          '**Attach one image or video to the same message.**',
-        ].join('\n'),
-      },
-      {
-        name: 'Read Cases',
-        value: [
-          `\`${prefix} case 133\` full case, issuer, date, action, reason, and proof`,
-          `\`${prefix} cases @user\` active case history`,
-          `\`${prefix} cases @user all\` includes removed actions`,
-          `\`${prefix} stats @user\` action totals`,
-          `\`${prefix} export @user all\` csv export`,
-        ].join('\n'),
-      },
-      {
-        name: 'Correct or Remove Records',
-        value: [
-          `\`${prefix} amend 133 <correction note>\` appends a note without editing history`,
-          `\`${prefix} remove 133 <reason>\` voids a case without deleting it`,
-        ].join('\n'),
-      },
-    );
-
-  const admin = new EmbedBuilder()
-    .setTitle('Administrative Setup and Audit Commands')
-    .addFields(
-      {
-        name: 'Initial Setup',
-        value: `\`${prefix} setup #hr-commands #audit-log #removed-actions #case-evidence\``,
-      },
-      {
-        name: 'Whitelist',
-        value: [
-          `\`${prefix} whitelist add @user hr\``,
-          `\`${prefix} whitelist add @user admin\``,
-          `\`${prefix} whitelist remove @user\``,
-          `\`${prefix} whitelist list\``,
-        ].join('\n'),
-      },
-      {
-        name: 'Audit Ledger',
-        value: [
-          `\`${prefix} audit recent 10\``,
-          `\`${prefix} audit verify\``,
-          `\`${prefix} removed 10\``,
-          `\`${prefix} status\``,
-        ].join('\n'),
-      },
-      {
-        name: 'Access Levels',
-        value:
-          '**HR** can create, read, amend, export, and view cases.\n**Admin** can also configure channels, manage the whitelist, remove cases, and verify the audit chain.\n**Owner IDs** are configured in the hosting environment and cannot be locked out by the Discord whitelist.',
-      },
-    );
-
-  return [main, admin];
-}
-
-function commandsEmbed(prefix) {
-  return new EmbedBuilder()
-    .setTitle('Command List')
-    .setDescription(
-      [
-        `\`${prefix} help\``,
-        `\`${prefix} commands\``,
-        `\`${prefix} warning\`, \`${prefix} strike\`, \`${prefix} suspension\`, \`${prefix} demotion\`, \`${prefix} fired\``,
-        `\`${prefix} case\`, \`${prefix} cases\`, \`${prefix} stats\`, \`${prefix} export\``,
-        `\`${prefix} amend\`, \`${prefix} remove\``,
-        `\`${prefix} whitelist\`, \`${prefix} setup\``,
-        `\`${prefix} audit\`, \`${prefix} removed\`, \`${prefix} status\``,
-      ].join('\n'),
-    )
-    .setFooter({ text: `Run ${prefix} help for syntax and examples.` });
-}
-
 function parseActionInput(actionType, raw) {
   const firstSpace = raw.indexOf(' ');
   if (firstSpace < 0) return null;
@@ -268,7 +180,17 @@ function parseActionInput(actionType, raw) {
     return { staffUserId, duration: parts[0], reason: parts[1] };
   }
 
-  if (actionType === 'demotion') {
+  if (actionType === 'hiring') {
+    const parts = splitPipeArguments(details, 2);
+    if (!parts) return null;
+    return {
+      staffUserId,
+      newRank: parts[0],
+      reason: parts[1],
+    };
+  }
+
+  if (actionType === 'demotion' || actionType === 'promotion') {
     const parts = splitPipeArguments(details, 3);
     if (!parts) return null;
     return {
@@ -285,6 +207,12 @@ function parseActionInput(actionType, raw) {
 function actionUsage(prefix, actionType) {
   if (actionType === 'suspension') {
     return `Use \`${prefix} suspension @user <duration> | <reason>\` and attach an image or video.`;
+  }
+  if (actionType === 'hiring') {
+    return `Use \`${prefix} hire @user <starting rank> | <reason>\` and attach an image or video.`;
+  }
+  if (actionType === 'promotion') {
+    return `Use \`${prefix} promote @user <old rank> | <new rank> | <reason>\` and attach an image or video.`;
   }
   if (actionType === 'demotion') {
     return `Use \`${prefix} demotion @user <old rank> | <new rank> | <reason>\` and attach an image or video.`;
@@ -322,7 +250,7 @@ async function handleCreateCase({
   if (mediaAttachments.length === 0) {
     await sendError(
       message,
-      'This action was not logged. Every disciplinary case requires one attached photo or video as evidence.',
+      'This action was not logged. Every staff action requires one attached photo or video as evidence.',
     );
     return;
   }
@@ -432,7 +360,7 @@ async function handleCreateCase({
         new EmbedBuilder()
           .setTitle(`Case #${fullCase.case_number} Logged`)
           .setDescription(
-            `${ACTION_LABELS[actionType]} was issued to <@${parsed.staffUserId}> by <@${message.author.id}>.`,
+            `${ACTION_LABELS[actionType]} was logged for <@${parsed.staffUserId}> by <@${message.author.id}>.`,
           )
           .addFields(
             { name: 'Date and Time', value: discordTimestamp(fullCase.created_at) },
@@ -530,12 +458,12 @@ export function createCommandHandler({ client, db, config }) {
     const rawArguments = firstSpace < 0 ? '' : afterPrefix.slice(firstSpace + 1).trim();
 
     if (!command || command === 'help' || command === 'guide') {
-      await message.reply({ embeds: helpEmbeds(config.prefix) });
+      await message.reply({ embeds: buildHelpEmbeds(config.prefix) });
       return;
     }
 
     if (command === 'commands' || command === 'commandlist') {
-      await message.reply({ embeds: [commandsEmbed(config.prefix)] });
+      await message.reply({ embeds: [buildCommandsEmbed(config.prefix)] });
       return;
     }
 

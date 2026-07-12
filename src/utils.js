@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 
 export const ACTION_LABELS = {
+  hiring: 'Hired',
+  promotion: 'Promoted',
   warning: 'Official Warning',
   strike: 'Strike',
   suspension: 'Suspension',
@@ -9,6 +11,12 @@ export const ACTION_LABELS = {
 };
 
 export const ACTION_ALIASES = {
+  hire: 'hiring',
+  hired: 'hiring',
+  hiring: 'hiring',
+  promote: 'promotion',
+  promoted: 'promotion',
+  promotion: 'promotion',
   warn: 'warning',
   warning: 'warning',
   strike: 'strike',

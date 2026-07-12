@@ -6,6 +6,8 @@ import { nowIso } from './utils.js';
 
 const ACCESS_LEVELS = new Set(['hr', 'admin']);
 const ACTION_TYPES = new Set([
+  'hiring',
+  'promotion',
   'warning',
   'strike',
   'suspension',
@@ -47,6 +49,85 @@ export function createDatabase(databasePath, initialCaseNumber = 100) {
     PRAGMA synchronous = FULL;
     PRAGMA busy_timeout = 5000;
   `);
+
+  const existingCasesTable = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'cases'")
+    .get();
+
+  if (
+    existingCasesTable?.sql &&
+    (!existingCasesTable.sql.includes("'hiring'") ||
+      !existingCasesTable.sql.includes("'promotion'"))
+  ) {
+    db.exec('PRAGMA foreign_keys = OFF;');
+    try {
+      db.exec(`
+        BEGIN IMMEDIATE;
+
+        DROP TRIGGER IF EXISTS cases_no_delete;
+        DROP TRIGGER IF EXISTS cases_immutable_fields;
+        DROP INDEX IF EXISTS idx_cases_staff;
+
+        CREATE TABLE cases_migrated (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          guild_id TEXT NOT NULL,
+          case_number INTEGER NOT NULL,
+          staff_user_id TEXT NOT NULL,
+          action_type TEXT NOT NULL CHECK(
+            action_type IN ('hiring', 'promotion', 'warning', 'strike', 'suspension', 'demotion', 'fired')
+          ),
+          reason TEXT NOT NULL,
+          duration TEXT,
+          previous_rank TEXT,
+          new_rank TEXT,
+          effective_at TEXT NOT NULL,
+          created_by TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          evidence_original_name TEXT NOT NULL,
+          evidence_stored_name TEXT NOT NULL,
+          evidence_content_type TEXT,
+          evidence_size INTEGER NOT NULL,
+          evidence_sha256 TEXT NOT NULL,
+          evidence_message_url TEXT,
+          evidence_attachment_url TEXT,
+          removed_at TEXT,
+          removed_by TEXT,
+          removal_reason TEXT,
+          UNIQUE (guild_id, case_number),
+          FOREIGN KEY (guild_id) REFERENCES guild_config(guild_id)
+        );
+
+        INSERT INTO cases_migrated (
+          id, guild_id, case_number, staff_user_id, action_type, reason,
+          duration, previous_rank, new_rank, effective_at, created_by, created_at,
+          evidence_original_name, evidence_stored_name, evidence_content_type,
+          evidence_size, evidence_sha256, evidence_message_url,
+          evidence_attachment_url, removed_at, removed_by, removal_reason
+        )
+        SELECT
+          id, guild_id, case_number, staff_user_id, action_type, reason,
+          duration, previous_rank, new_rank, effective_at, created_by, created_at,
+          evidence_original_name, evidence_stored_name, evidence_content_type,
+          evidence_size, evidence_sha256, evidence_message_url,
+          evidence_attachment_url, removed_at, removed_by, removal_reason
+        FROM cases;
+
+        DROP TABLE cases;
+        ALTER TABLE cases_migrated RENAME TO cases;
+
+        COMMIT;
+      `);
+    } catch (error) {
+      try {
+        db.exec('ROLLBACK;');
+      } catch {
+        // Preserve the migration error if rollback also fails.
+      }
+      throw error;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON;');
+    }
+  }
 
   function transaction(fn) {
     return (...args) => {
@@ -94,7 +175,7 @@ export function createDatabase(databasePath, initialCaseNumber = 100) {
       case_number INTEGER NOT NULL,
       staff_user_id TEXT NOT NULL,
       action_type TEXT NOT NULL CHECK(
-        action_type IN ('warning', 'strike', 'suspension', 'demotion', 'fired')
+        action_type IN ('hiring', 'promotion', 'warning', 'strike', 'suspension', 'demotion', 'fired')
       ),
       reason TEXT NOT NULL,
       duration TEXT,
