@@ -1,0 +1,24 @@
+{
+  "name": "staff-action-ledger",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Discord prefix-command bot for tamper-evident staff administrative records.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "dependencies": {
+    "discord.js": "14.26.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0"
+  },
+  "overrides": {
+    "undici": "6.27.0"
+  }
+}
