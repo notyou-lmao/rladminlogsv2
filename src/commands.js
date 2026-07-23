@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  ActionRowBuilder,
   AttachmentBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   EmbedBuilder,
   PermissionFlagsBits,
 } from 'discord.js';
@@ -57,6 +60,24 @@ async function sendError(message, text) {
         .setDescription(text),
     ],
   });
+}
+
+function buildCaseNavigationRow(sessionId, pageIndex, pageCount, disabled = false) {
+  const button = (action, emoji, label, isDisabled = false) =>
+    new ButtonBuilder()
+      .setCustomId(`case-list:${sessionId}:${action}`)
+      .setEmoji(emoji)
+      .setLabel(label)
+      .setStyle(action === 'close' ? ButtonStyle.Danger : ButtonStyle.Secondary)
+      .setDisabled(disabled || isDisabled);
+
+  return new ActionRowBuilder().addComponents(
+    button('first', '⏮️', 'First', pageIndex === 0),
+    button('previous', '◀️', 'Previous', pageIndex === 0),
+    button('next', '▶️', 'Next', pageIndex >= pageCount - 1),
+    button('last', '⏭️', 'Last', pageIndex >= pageCount - 1),
+    button('close', '✖️', 'Close'),
+  );
 }
 
 async function fetchTextChannel(client, channelId) {
@@ -691,9 +712,69 @@ export function createCommandHandler({ client, db, config }) {
         await sendError(message, `Use \`${config.prefix} cases @user\` or add \`all\`.`);
         return;
       }
+
       const cases = db.listCases(message.guild.id, staffUserId, includeRemoved);
-      await message.reply({
-        embeds: buildCaseListEmbeds(cases, staffUserId, includeRemoved),
+      const pages = buildCaseListEmbeds(cases, staffUserId, includeRemoved);
+      let pageIndex = 0;
+      const sessionId = message.id;
+      const hasNavigation = pages.length > 1;
+
+      const response = await message.reply({
+        embeds: [pages[pageIndex]],
+        components: hasNavigation
+          ? [buildCaseNavigationRow(sessionId, pageIndex, pages.length)]
+          : [],
+      });
+
+      if (!hasNavigation) return;
+
+      const collector = response.createMessageComponentCollector({
+        time: 10 * 60 * 1000,
+        filter: (interaction) =>
+          interaction.isButton() &&
+          interaction.customId.startsWith(`case-list:${sessionId}:`),
+      });
+
+      collector.on('collect', async (interaction) => {
+        if (interaction.user.id !== message.author.id) {
+          await interaction.reply({
+            content: 'Only the person who opened this case list can use its navigation buttons.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const action = interaction.customId.split(':').at(-1);
+        if (action === 'close') {
+          await interaction.update({ components: [] });
+          collector.stop('closed');
+          return;
+        }
+
+        if (action === 'first') pageIndex = 0;
+        if (action === 'previous') pageIndex = Math.max(0, pageIndex - 1);
+        if (action === 'next') pageIndex = Math.min(pages.length - 1, pageIndex + 1);
+        if (action === 'last') pageIndex = pages.length - 1;
+
+        await interaction.update({
+          embeds: [pages[pageIndex]],
+          components: [
+            buildCaseNavigationRow(sessionId, pageIndex, pages.length),
+          ],
+        });
+      });
+
+      collector.on('end', async (_collected, reason) => {
+        if (reason === 'closed') return;
+        try {
+          await response.edit({
+            components: [
+              buildCaseNavigationRow(sessionId, pageIndex, pages.length, true),
+            ],
+          });
+        } catch {
+          // The message may have been deleted or the channel may no longer exist.
+        }
       });
       return;
     }
