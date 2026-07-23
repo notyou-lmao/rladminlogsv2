@@ -215,6 +215,7 @@ export function buildCaseEmbed(caseRecord) {
 }
 
 export function buildCaseListEmbeds(cases, staffUserId, includeRemoved = false) {
+  const casesPerPage = 12;
   const lines = cases.map((item) => {
     const removed = item.removed_at ? ' • removed' : '';
     return `**#${item.case_number}** • ${ACTION_LABELS[item.action_type] || item.action_type} • ${discordTimestamp(item.created_at, 'f')}${removed}`;
@@ -223,29 +224,39 @@ export function buildCaseListEmbeds(cases, staffUserId, includeRemoved = false) 
   if (!lines.length) {
     return [
       new EmbedBuilder()
-        .setTitle(`Cases for ${staffUserId}`)
-        .setDescription('No matching cases were found.'),
-    ];
-  }
-
-  const embeds = [];
-  for (let index = 0; index < lines.length; index += 15) {
-    embeds.push(
-      new EmbedBuilder()
-        .setTitle(
-          index === 0
-            ? `Cases for <@${staffUserId}>`
-            : `Cases for <@${staffUserId}> continued`,
-        )
-        .setDescription(lines.slice(index, index + 15).join('\n'))
+        .setTitle(`Cases for <@${staffUserId}>`)
+        .setDescription('No matching cases were found.')
         .setFooter({
           text: includeRemoved
             ? 'Includes removed or voided actions'
             : 'Active actions only',
         }),
+    ];
+  }
+
+  const pageCount = Math.ceil(lines.length / casesPerPage);
+  const embeds = [];
+
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+    const start = pageIndex * casesPerPage;
+    const end = start + casesPerPage;
+    embeds.push(
+      new EmbedBuilder()
+        .setTitle(`Cases for <@${staffUserId}>`)
+        .setDescription(lines.slice(start, end).join('\n'))
+        .setFooter({
+          text: [
+            `Page ${pageIndex + 1} of ${pageCount}`,
+            `${cases.length} total case${cases.length === 1 ? '' : 's'}`,
+            includeRemoved
+              ? 'Includes removed or voided actions'
+              : 'Active actions only',
+          ].join(' • '),
+        }),
     );
   }
-  return embeds.slice(0, 10);
+
+  return embeds;
 }
 
 export function buildAuditEmbed(row) {
